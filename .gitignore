@@ -1,0 +1,15 @@
+*.o
+*.a
+core
+*.nsys-rep
+*.sqlite
+remove
+thrust
+BlackScholes
+BlackScholes_clean
+BlackScholes_cpu
+BlackScholes_gpu
+.vscode
+pnl_cpu
+pnl_gpu
+.ipynb_checkpoints
