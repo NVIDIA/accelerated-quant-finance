@@ -67,13 +67,13 @@ namespace stdex = std::experimental;
 /// @brief Generates multiple simulation paths to a given horizon
 /// @param s0        (Input) Initial Spot Price
 /// @param sigma_r   (Input) Realized Spot Volatility
-/// @param rfr       (Input) Risk-free Rate
+/// @param RiskFreeRate       (Input) Risk-free Rate
 /// @param horizon   (Input) Simulation Horizon
 /// @param dt        (Input) Timestep
 /// @param num_paths (Input) Number of paths
 /// @return A horizon*num_lengths vector of paths. [num_paths, horizon]
 std::vector<double> 
-generate_paths(const double s0, const double sigma_r, const double rfr,
+generate_paths(const double s0, const double sigma_r, const double RiskFreeRate,
                const int horizon, const double dt, const int num_paths)
 {
   // Allocates memory for the generated paths
@@ -103,7 +103,7 @@ generate_paths(const double s0, const double sigma_r, const double rfr,
               // Generates a random number from a normal distribution
               double w = distribution(generator);
               // Calculates a price at this point in the path
-              path(p,k) = path(p,k-1) * exp((rfr - (0.5*sigma_r*sigma_r))*dt + sigma_r*sqrt(dt)*w);
+              path(p,k) = path(p,k-1) * exp((RiskFreeRate - (0.5*sigma_r*sigma_r))*dt + sigma_r*sqrt(dt)*w);
             });
     });
   // Returns the generated array
@@ -121,7 +121,7 @@ void calculate_pnl_paths_sequential(stdex::mdspan<const double, stdex::dextents<
                          std::span<const double>Strikes, 
                          std::span<const double>Maturities, 
                          std::span<const double>Volatilities, 
-                         const double rfr,
+                         const double RiskFreeRate,
                          std::span<double>pnl, 
                          const double dt)
 {
@@ -158,7 +158,7 @@ void calculate_pnl_paths_sequential(stdex::mdspan<const double, stdex::dextents<
                                s_prev, 
                                Strikes[opt], 
                                Maturities[opt] - std::max(dt*(step-1),0.0),
-                               rfr,
+                               RiskFreeRate,
                                Volatilities[opt],
                                CALL, 
                                GAMMA);
@@ -166,7 +166,7 @@ void calculate_pnl_paths_sequential(stdex::mdspan<const double, stdex::dextents<
                                s_prev, 
                                Strikes[opt], 
                                Maturities[opt] - std::max(dt*(step-1),0.0),
-                               rfr,
+                               RiskFreeRate,
                                Volatilities[opt],
                                CALL, 
                                THETA);
@@ -188,7 +188,7 @@ void calculate_pnl_paths_parallel(stdex::mdspan<const double, stdex::dextents<si
                          std::span<const double>Strikes, 
                          std::span<const double>Maturities, 
                          std::span<const double>Volatilities, 
-                         const double rfr,
+                         const double RiskFreeRate,
                          std::span<double>pnl, 
                          const double dt)
 {
@@ -228,7 +228,7 @@ void calculate_pnl_paths_parallel(stdex::mdspan<const double, stdex::dextents<si
                            s_prev, 
                            Strikes[opt], 
                            time_to_maturity,
-                           rfr,
+                           RiskFreeRate,
                            Volatilities[opt],
                            CALL, 
                            GAMMA);
@@ -236,7 +236,7 @@ void calculate_pnl_paths_parallel(stdex::mdspan<const double, stdex::dextents<si
                            s_prev, 
                            Strikes[opt], 
                            time_to_maturity,
-                           rfr,
+                           RiskFreeRate,
                            Volatilities[opt],
                            CALL, 
                            THETA);
@@ -282,7 +282,7 @@ int main(int argc, char **argv) {
                sigma_r = 0.5,           // Realized Spot Volatility Used for Simulation
                sigma_i = 0.3,           // Implied Spot Volatility Used for Pricing
                dt = 1.0 / days_in_year, // Timestep in years (1 day)
-               rfr = 0.0;               // Risk-free Rate
+               RiskFreeRate = 0.0;               // Risk-free Rate
   
   const int horizon = 180;   // 180 day (6 month) simulation horizon
   const int num_paths = 1000; // 1000 simulation paths
@@ -325,7 +325,7 @@ int main(int argc, char **argv) {
   printf("...done generating input data.\n");
 
   // generate paths
-  auto path_vec = generate_paths(s0, sigma_r, rfr, horizon, dt, num_paths);
+  auto path_vec = generate_paths(s0, sigma_r, RiskFreeRate, horizon, dt, num_paths);
   // Create a 2D view into the paths array [num_paths,horizon]
   auto paths = stdex::mdspan{path_vec.data(),num_paths,horizon};
 
@@ -349,7 +349,7 @@ int main(int argc, char **argv) {
   // available parallelism. The iteration along paths is done sequentially on
   // the CPU, even when building for the GPU.
   ///////////////////////////////////////////////////////////////////////////
-  calculate_pnl_paths_sequential(paths, Strikes, Maturities, Volatilities, rfr, pnl, dt);
+  calculate_pnl_paths_sequential(paths, Strikes, Maturities, Volatilities, RiskFreeRate, pnl, dt);
   // pnl holds an accumulation of P&L for all paths, need to divide by num_paths
   std::transform(pnl.begin(),pnl.end(),pnl.begin(),[=](double p){ return p/num_paths; });
   // Find the maximum PNL value
@@ -381,7 +381,7 @@ int main(int argc, char **argv) {
   // reduces the need to synchronize between the CPU and GPU when building
   // for GPU execution.
   ///////////////////////////////////////////////////////////////////////////
-  calculate_pnl_paths_parallel(paths, Strikes, Maturities, Volatilities, rfr, pnl2, dt);
+  calculate_pnl_paths_parallel(paths, Strikes, Maturities, Volatilities, RiskFreeRate, pnl2, dt);
 
   // PNL holds an accumulation of P&L for all paths, to calculate the average we divide by num_paths 
   // Since pnl has already been used on the device, we will run in parallel to avoid data migration
